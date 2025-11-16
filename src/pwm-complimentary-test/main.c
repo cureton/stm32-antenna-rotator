@@ -10,7 +10,8 @@
 // Dead time in timer clock ticks (e.g., approx 1us dead time)
 // The actual register value calculation is complex and depends on the specific STM32 family.
 // Consult the device RM for the dead-time register (BDTR) calculation. 
-// A small value is used here for demonstration.
+// This value effectively delays the assertion of both the main and complimentry output providing deadtime for transisters. 
+
 #define DEAD_TIME_VALUE 10 // Example value, adjust as needed
 
 void timer_setup(void) {
@@ -26,34 +27,42 @@ void timer_setup(void) {
     gpio_set_af(GPIOB, GPIO_AF1, GPIO13 | GPIO14); // AF1 is for TIM1 on most STM32F4xx
 
     /* Timer base configuration */
-    timer_set_mode(TIM1, TIM_CR1_CKD_CK_INT, TIM_CR1_CMS_EDGE, TIM_CR1_DIR_DOWN | TIM_CR1_DIR_UP);
-
-    timer_set_alignment(TIM1, TIM_CR1_CMS_CENTER_1);
-    timer_set_prescaler(TIM1, 0); // No prescaler, use full APB2 clock (84 MHz)
-    timer_set_period(TIM1, PERIOD_TICKS-1);
-    timer_set_repetition_counter(TIM1, 0); // Not using repetition counter in this simple example
+    /* Run counter on internal clock, Centre aliged PWM mode, Up cound direction (Unused) */  
+    timer_set_mode(TIM1, TIM_CR1_CKD_CK_INT, TIM_CR1_CMS_CENTER_1,  TIM_CR1_DIR_UP);
     
-    /* Output Compare Mode configuration */
-    timer_set_oc_mode(TIM1, TIM_OC1, TIM_OCM_PWM1);
-    timer_set_oc_value(TIM1, TIM_OC1, 127);
-    timer_set_oc_mode(TIM1, TIM_OC2, TIM_OCM_PWM1);
-    timer_set_oc_value(TIM1, TIM_OC2, 50);
+    /* Set prescaler to div(1), use full APB2 clock  */ 
+    timer_set_prescaler(TIM1, 0); 
+
+    /* Set repetition period */ 
+    timer_set_period(TIM1, PERIOD_TICKS);
+ 
+    /* Dead time insertion and complementary output enable */
+    // Note: The specific value for dead time depends on clock speed and desired microsecond delay.
+    // Refer to the STM32 reference manual for precise dead-time register (BDTR) value calculation.
+    timer_set_deadtime(TIM1, DEAD_TIME_VALUE); 
+
 
     /* Enable output compare preload (ensures smooth updates) */
     timer_enable_oc_preload(TIM1, TIM_OC1);
     timer_enable_oc_preload(TIM1, TIM_OC2);
 
-    /* Dead time insertion and complementary output enable */
-    // Note: The specific value for dead time depends on clock speed and desired microsecond delay.
-    // Refer to the STM32 reference manual for precise dead-time register (BDTR) value calculation.
-    timer_set_deadtime(TIM1, DEAD_TIME_VALUE); 
-    
-    /* Enable the complementary output channel (CH1N) and main output enable (MOE) */
+    /* Output Compare Mode configuration */
+    /* Output compare mode - Normal PWM  */
+    timer_set_oc_mode(TIM1, TIM_OC1, TIM_OCM_PWM1);
+    timer_set_oc_mode(TIM1, TIM_OC2, TIM_OCM_PWM1);
+
+    /* Enable PWM outputs 1 and 2 and their compliments */
+    timer_enable_oc_output(TIM1, TIM_OC1);
+    timer_enable_oc_output(TIM1, TIM_OC1N);
+    timer_enable_oc_output(TIM1, TIM_OC2);
+    timer_enable_oc_output(TIM1, TIM_OC2N);
+
+
+    /* Start timers are 50% duty cycle - neutral drive */
+    timer_set_oc_value(TIM1, TIM_OC1, PERIOD_TICKS/2);
+    timer_set_oc_value(TIM1, TIM_OC2, PERIOD_TICKS/2);
+
     // For advanced timers, MOE must be set for outputs to appear.
-  /* Enable the complementary output channel (CH1N) */
-    // Use this function name instead:
-//    timer_enable_oc_output_complementary(TIM1, TIM_OC1); // This function (or similar macro) sets CC1NE
-    TIM_CCER(TIM1) |= TIM_CCER_CC1NE |  TIM_CCER_CC2NE ;
     timer_enable_break_main_output(TIM1); // This sets the MOE bit in BDTR
 
     /* Enable the main output channel (CH1) */
@@ -65,7 +74,6 @@ void timer_setup(void) {
 }
 
 int main(void) {
-//    rcc_clock_setup_hse(&rcc_hse_8mhz_3v3[RCC_CLOCK_3V3_84MHZ]); // Example clock setup
 
     timer_setup();
 
